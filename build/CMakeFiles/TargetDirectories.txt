@@ -1,0 +1,4 @@
+/home/tasbolat/Documents/point_cloud_detect/build/CMakeFiles/edit_cache.dir
+/home/tasbolat/Documents/point_cloud_detect/build/CMakeFiles/rebuild_cache.dir
+/home/tasbolat/Documents/point_cloud_detect/build/CMakeFiles/view.dir
+/home/tasbolat/Documents/point_cloud_detect/build/CMakeFiles/region_clustering.dir
