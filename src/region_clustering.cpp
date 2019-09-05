@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <chrono>
 
 #include <pcl/common/common_headers.h>
 #include <pcl/point_types.h>
@@ -26,17 +27,18 @@
 using namespace std::chrono_literals;
 
 
-pcl::visualization::PCLVisualizer::Ptr rgbVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud)
+pcl::visualization::PCLVisualizer::Ptr rgbVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud, pcl::visualization::PCLVisualizer::Ptr viewer)
 {
   // --------------------------------------------
   // -----Open 3D viewer and add point cloud-----
   // --------------------------------------------
-  pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-  viewer->setBackgroundColor (255, 255, 255);
+  //pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+  viewer->removeAllPointClouds();
+  viewer->setBackgroundColor (0,0,0);
   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
   viewer->addPointCloud<pcl::PointXYZRGB> (cloud, rgb, "sample cloud");
   viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
-  viewer->addCoordinateSystem (0.1);
+  //viewer->addCoordinateSystem (0.1);
   viewer->initCameraParameters ();
   return (viewer);
 }
@@ -99,34 +101,32 @@ void getAverageXYZRGBCluster(pcl::PointIndices &cluster, pcl::PointCloud<pcl::Po
 
 int main (int argc, char** argv)
 {
-  if (argc != 2){
+  if (argc != 1){
     std::cout << "Wrong number of arguments!" << std::endl;
     return (-1);
   }
   // Open one frame
   pcl::PointCloud <pcl::PointXYZRGB>::Ptr pointCloud (new pcl::PointCloud <pcl::PointXYZRGB>);
-    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/3d/colors_move_1567153295615528.pcd", *pointCloud) == -1 ) {
+    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/close.pcd", *pointCloud) == -1 ) {
       std::cout << "Cloud reading failed." << std::endl;
       return (-1);
     }
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   pcl::PointCloud<pcl::PointXYZHSV>::Ptr hsv_cloud (new pcl::PointCloud<pcl::PointXYZHSV>);
   pcl::PointCloudXYZRGBtoXYZHSV(*pointCloud, *hsv_cloud);
-
-  
-  // Voxel grid filtering destroys HSV information!
-  // Create the filtering object: downsample the dataset using a leaf size of 1mm
-  // pcl::PointCloud<pcl::PointXYZHSV>::Ptr cloud_downsampled (new pcl::PointCloud<pcl::PointXYZHSV>);
-  // pcl::VoxelGrid<pcl::PointXYZHSV> sor;
-  // sor.setInputCloud (hsv_cloud);
-  // sor.setLeafSize (0.001f, 0.001f, 0.001f);
-  // sor.filter (*cloud_downsampled);
 
   //For multiple filters, I am lazy, https://stackoverflow.com/questions/45790828/remove-points-outside-defined-3d-box-inside-pcl-visualizer
   pcl::PassThrough<pcl::PointXYZHSV> pass;
   pass.setInputCloud (hsv_cloud);
+  pass.setFilterFieldName ("z");
+  pass.setFilterLimits (0, 0.5);
+  pass.filter (*hsv_cloud);
+
+  pass.setInputCloud (hsv_cloud);
   pass.setFilterFieldName ("h");
-  pass.setFilterLimits (60, 360);
+  pass.setFilterLimits (0, 360);
   pass.filter (*hsv_cloud);
 
   pass.setInputCloud (hsv_cloud);
@@ -136,7 +136,7 @@ int main (int argc, char** argv)
 
   pass.setInputCloud (hsv_cloud);
   pass.setFilterFieldName ("v");
-  pass.setFilterLimits (0, 1);
+  pass.setFilterLimits (0.2, 1);
   pass.filter (*hsv_cloud);
 
   // for(pcl::PointCloud<pcl::PointXYZHSV>::iterator it = hsv_cloud->begin(); it!= hsv_cloud->end(); it++)
@@ -147,8 +147,8 @@ int main (int argc, char** argv)
   //Convert back to XYZRGB for visualization
   //PointCloudXYZHSVtoXYZRGB doesn't exist in PCL.
   //http://www.pcl-users.org/PCLVisualizer-is-showing-black-and-white-HSV-Point-Cloud-td4045564.html
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr rgb_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
-  PointCloudXYZHSVtoXYZRGB(*hsv_cloud, *rgb_cloud);
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr rgb_cloud_full (new pcl::PointCloud<pcl::PointXYZRGB>);
+  PointCloudXYZHSVtoXYZRGB(*hsv_cloud, *rgb_cloud_full);
 
 
 
@@ -159,12 +159,11 @@ int main (int argc, char** argv)
   =============================================================================================*/
   // Voxel grid filtering to downsample rgb_cloud (Optional)
   // Create the filtering object: downsample the dataset using a leaf size of 1mm
-  /*pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled (new pcl::PointCloud<pcl::PointXYZRGB>);
   pcl::VoxelGrid<pcl::PointXYZRGB> vg;
-  vg.setInputCloud (rgb_cloud);
-  vg.setLeafSize (0.001f, 0.001f, 0.001f);
-  vg.filter (*cloud_downsampled);
-*/
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr rgb_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+  vg.setInputCloud (rgb_cloud_full);
+  vg.setLeafSize (0.002f, 0.002f, 0.002f);
+  vg.filter (*rgb_cloud);
 
 
   // Perform Euclidean Cluster Extraction to segment out the various clusters
@@ -172,8 +171,6 @@ int main (int argc, char** argv)
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   // Creating the KdTree object for the search method of the extraction
   pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
-  tree->setInputCloud (rgb_cloud);
-
   std::vector<pcl::PointIndices> cluster_indices;
   // pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
   // ec.setClusterTolerance (0.02); // 2cm
@@ -185,12 +182,11 @@ int main (int argc, char** argv)
   pcl::IndicesPtr indices (new std::vector <int>);
   pcl::RegionGrowingRGB<pcl::PointXYZRGB> reg;
   reg.setInputCloud (rgb_cloud);
-  //reg.setIndices (indices);
   reg.setSearchMethod (tree);
-  reg.setDistanceThreshold (3);
-  reg.setPointColorThreshold (4);
-  reg.setRegionColorThreshold (30);
-  reg.setMinClusterSize (60);
+  reg.setPointColorThreshold (10); // We grow regions by color. Should be not too small so that darker shades can be pulled into cluster. 
+  reg.setRegionColorThreshold (9999); // We merge regions by position. 
+  reg.setDistanceThreshold (0.0025); // A number that is slightly above voxel grid leaf size, so that only adjacent poins will be considered as neighbours. Too big means clusters will be pulled in indiscriminately.
+  reg.setMinClusterSize (10); // A small number will do.
   reg.extract (cluster_indices);
 
 
@@ -198,8 +194,13 @@ int main (int argc, char** argv)
   for (size_t i=0; i<cluster_indices.size(); i++) {
     getAverageXYZRGBCluster(cluster_indices[i], rgb_cloud, &xyzrgb_avg_p); 
     std::cout << "Cluster " << i << " average RGB: " << int(xyzrgb_avg_p.r) << ", " << int(xyzrgb_avg_p.g) << ", " << int(xyzrgb_avg_p.b) << std::endl;
+    std::cout << "Cluster " << i << " average XYZ: " << xyzrgb_avg_p.x << ", " << xyzrgb_avg_p.y << ", " << xyzrgb_avg_p.z << std::endl;
     std::cout << "Number of points: " << cluster_indices[i].indices.size() << std::endl;
   }
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> fp_ms = stop - start;
+  std::cout << "Milliseconds taken to load PCD all the way to getting clusters and associated RGB centers: " << fp_ms.count() << std::endl; 
 
 
   // Convert all the clusters into XYZRGB for visualization
@@ -220,20 +221,16 @@ int main (int argc, char** argv)
       //std::cout << "Cluster " << j << " size: " << cloud_cluster->points.size() << std::endl;
   }
 
-  std::cout << "No of clusters: " << cluster_indices.size() << std::endl;
-  /*=============================================================================================*/
-
-
-
-
-
   // Visuzalize the cloud
   pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-  viewer = rgbVis(cloud_cluster[std::stod(argv[1])]);
   //viewer = rgbVis(rgb_cloud);
-  while (!viewer->wasStopped ()) {
-    viewer->spinOnce (100);
-    std::this_thread::sleep_for(100ms);
+  int cluster_idx = 0;
+  while (true) {
+    rgbVis(cloud_cluster[cluster_idx % cluster_indices.size()], viewer);
+    std::cout << "Displaying cluster " << cluster_idx % cluster_indices.size() << std::endl;
+    viewer->spinOnce (3000);
+    std::this_thread::sleep_for(3000ms);
+    cluster_idx++;
   }
 
   return (0);
