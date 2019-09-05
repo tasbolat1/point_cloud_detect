@@ -58,7 +58,7 @@ std::tuple<int, int> compute_color(int r, int g, int b){
 }
 
 
-void PointCloudXYZHSVtoXYZRGB(const pcl::PointCloud<pcl::PointXYZHSV>& in, pcl::PointCloud<pcl::PointXYZRGB>& out)
+void PointCloudXYZHSVtoXYZRGB(pcl::PointCloud<pcl::PointXYZHSV>& in, pcl::PointCloud<pcl::PointXYZRGB>& out)
 {
     out.width = in.width;
     out.height = in.height;
