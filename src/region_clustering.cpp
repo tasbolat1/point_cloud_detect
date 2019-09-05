@@ -2,6 +2,8 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <tuple>
+#include <math.h>     
 
 #include <pcl/common/common_headers.h>
 #include <pcl/point_types.h>
@@ -41,6 +43,18 @@ pcl::visualization::PCLVisualizer::Ptr rgbVis (pcl::PointCloud<pcl::PointXYZRGB>
   //viewer->addCoordinateSystem (0.1);
   viewer->initCameraParameters ();
   return (viewer);
+}
+
+std::tuple<int, int> compute_color(int r, int g, int b){
+  int n_joints = 6;
+  int predefined_joint_colors[n_joints][3] = {{120,50,120}, {120,120,50}, {50,50,120}, {50,120,50}, {120,50,50}, {50,120,120}};
+  std::vector<int> distances = {0, 0, 0 ,0 ,0, 0};
+  for (size_t i = 0; i < n_joints; i++)
+  {
+    distances[i] = pow(r - predefined_joint_colors[i][0], 2) + pow(g - predefined_joint_colors[i][1], 2) + pow(b - predefined_joint_colors[i][2], 2);
+  }
+  int idx = std::distance(distances.begin(), std::min_element(distances.begin(), distances.end()));
+  return std::make_tuple(idx, distances[idx]);
 }
 
 
@@ -107,7 +121,7 @@ int main (int argc, char** argv)
   }
   // Open one frame
   pcl::PointCloud <pcl::PointXYZRGB>::Ptr pointCloud (new pcl::PointCloud <pcl::PointXYZRGB>);
-    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/close.pcd", *pointCloud) == -1 ) {
+    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/open.pcd", *pointCloud) == -1 ) {
       std::cout << "Cloud reading failed." << std::endl;
       return (-1);
     }
@@ -186,16 +200,44 @@ int main (int argc, char** argv)
   reg.setPointColorThreshold (10); // We grow regions by color. Should be not too small so that darker shades can be pulled into cluster. 
   reg.setRegionColorThreshold (9999); // We merge regions by position. 
   reg.setDistanceThreshold (0.0025); // A number that is slightly above voxel grid leaf size, so that only adjacent poins will be considered as neighbours. Too big means clusters will be pulled in indiscriminately.
-  reg.setMinClusterSize (10); // A small number will do.
+  reg.setMinClusterSize (20); // A small number will do.
   reg.extract (cluster_indices);
 
-
+  // Huge assumption; there is no way an actual marker will be assigned to some color that it does not belong to.
   pcl::PointXYZRGB xyzrgb_avg_p;
+  int joint[6] = {-1, -1, -1, -1, -1, -1};
+  int squared_distance[6] = {999999, 999999, 999999, 999999, 999999, 999999};
+  double joint_coords[6][3] = {{-10,-10,-10}, {-10,-10,-10}, {-10,-10,-10}, {-10,-10,-10}, {-10,-10,-10}, {-10,-10,-10}};
+  std::string color[6] = {"purple", "yellow", "blue", "green", "red", "cyan"};
   for (size_t i=0; i<cluster_indices.size(); i++) {
     getAverageXYZRGBCluster(cluster_indices[i], rgb_cloud, &xyzrgb_avg_p); 
     std::cout << "Cluster " << i << " average RGB: " << int(xyzrgb_avg_p.r) << ", " << int(xyzrgb_avg_p.g) << ", " << int(xyzrgb_avg_p.b) << std::endl;
     std::cout << "Cluster " << i << " average XYZ: " << xyzrgb_avg_p.x << ", " << xyzrgb_avg_p.y << ", " << xyzrgb_avg_p.z << std::endl;
     std::cout << "Number of points: " << cluster_indices[i].indices.size() << std::endl;
+    std::tuple<int, int> joint_idx_weight = compute_color(int(xyzrgb_avg_p.r), int(xyzrgb_avg_p.g), int(xyzrgb_avg_p.b));
+    std::cout << std::get<0>(joint_idx_weight) << ", " << std::get<1>(joint_idx_weight) << std::endl;
+    if (joint[std::get<0>(joint_idx_weight)] == -1){
+      joint[std::get<0>(joint_idx_weight)] = int(i);
+      squared_distance[std::get<0>(joint_idx_weight)] = std::get<1>(joint_idx_weight);
+      joint_coords[std::get<0>(joint_idx_weight)][0] = xyzrgb_avg_p.x;
+      joint_coords[std::get<0>(joint_idx_weight)][1] = xyzrgb_avg_p.y;
+      joint_coords[std::get<0>(joint_idx_weight)][2] = xyzrgb_avg_p.z;
+    }
+    else{
+      if(std::get<1>(joint_idx_weight) < squared_distance[std::get<0>(joint_idx_weight)]){
+        joint[std::get<0>(joint_idx_weight)] = int(i);
+        squared_distance[std::get<0>(joint_idx_weight)] = std::get<1>(joint_idx_weight);
+        joint_coords[std::get<0>(joint_idx_weight)][0] = xyzrgb_avg_p.x;
+        joint_coords[std::get<0>(joint_idx_weight)][1] = xyzrgb_avg_p.y;
+        joint_coords[std::get<0>(joint_idx_weight)][2] = xyzrgb_avg_p.z;
+      }
+    }
+  }
+  for (size_t i=0; i<6; i++){
+    std::cout << color[i] << ": Cluster " << joint[i] << ", Squared distance: " << squared_distance[i] << std::endl;
+  }
+  for (size_t i=0; i<6; i++){
+    std::cout << color[i] << " position: " << joint_coords[i][0] << "," << joint_coords[i][1] << "," << joint_coords[i][2] << std::endl;
   }
 
   auto stop = std::chrono::high_resolution_clock::now();

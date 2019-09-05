@@ -37,7 +37,7 @@ int main (int argc, char** argv)
 {
 	// Open one frame
 	pcl::PointCloud <pcl::PointXYZRGB>::Ptr pointCloud (new pcl::PointCloud <pcl::PointXYZRGB>);
-    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/close.pcd", *pointCloud) == -1 ) {
+    if ( pcl::io::loadPCDFile <pcl::PointXYZRGB> ("../data/open.pcd", *pointCloud) == -1 ) {
     	std::cout << "Cloud reading failed." << std::endl;
     	return (-1);
     }
